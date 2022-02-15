@@ -1,21 +1,12 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.4;
-
 import "./DeedRepository.sol";
-
 /**
  * @title Auction Repository
  * This contracts allows auctions to be created for non-fungible tokens
  * Moreover, it includes the basic functionalities of an auction house
  */
 contract AuctionRepository {
-    
-    // Array with all auctions
-    Auction[] public auctions;
-
-    // Mapping from auction index to user bids
-    mapping(uint256 => Bid[]) public auctionBids;
-
     // Mapping from owner to a list of owned auctions
     mapping(address => uint[]) public auctionOwner;
 
@@ -24,7 +15,6 @@ contract AuctionRepository {
         address payable from;
         uint256 amount;
     }
-
     // Auction struct which holds all the required info
     struct Auction {
         string name;
@@ -37,6 +27,20 @@ contract AuctionRepository {
         bool active;
         bool finalized;
     }
+    // Array with all auctions
+    Auction[] public auctions;
+    // Mapping from auction index to user bids
+    mapping(uint256 => Bid[]) public auctionBids;
+
+    event BidSuccess(address _from, uint _auctionId);
+    // AuctionCreated is fired when an auction is created
+    event AuctionCreated(address _owner, uint _auctionId);
+    // AuctionCanceled is fired when an auction is canceled
+    event AuctionCanceled(address _owner, uint _auctionId);
+    // AuctionFinalized is fired when an auction is finalized
+    event AuctionFinalized(address _owner, uint _auctionId);
+    // Ownership transfered to contract
+    event OwnershipTransfered(address _from, uint _deedId);
 
     /**
     * @dev Guarantees msg.sender is owner of the given auction
@@ -46,7 +50,6 @@ contract AuctionRepository {
         require(auctions[_auctionId].owner == msg.sender);
         _;
     }
-
     /**
     * @dev Guarantees this contract is owner of the given deed/token
     * @param _deedRepositoryAddress address of the deed repository to validate from
@@ -54,10 +57,9 @@ contract AuctionRepository {
     */
     modifier contractIsDeedOwner(address _deedRepositoryAddress, uint256 _deedId) {
         address deedOwner = DeedRepository(_deedRepositoryAddress).ownerOf(_deedId);
-        require(deedOwner == msg.sender, "Not Owner of the Deed");
+        require(deedOwner == address(this), "Not Owner of the Deed");
         _;
     }
-
     /**
     * @dev Disallow payments to this contract directly
     */
@@ -93,8 +95,6 @@ contract AuctionRepository {
         emit AuctionCreated(msg.sender, auctionId);
         return true;
     }
-    
-
     /**
     * @dev Gets the length of auctions
     * @return uint representing the auction count
@@ -102,7 +102,6 @@ contract AuctionRepository {
     function getCount() public view returns(uint) {
         return auctions.length;
     }
-
     /**
     * @dev Gets the bid counts of a given auction
     * @param _auctionId uint ID of the auction
@@ -110,7 +109,6 @@ contract AuctionRepository {
     function getBidsCount(uint _auctionId) public view returns(uint) {
         return auctionBids[_auctionId].length;
     }
-
     /**
     * @dev Gets an array of owned auctions
     * @param _owner address of the auction owner
@@ -119,7 +117,6 @@ contract AuctionRepository {
         uint[] memory ownedAuctions = auctionOwner[_owner];
         return ownedAuctions;
     }
-
     /**
     * @dev Gets an array of owned auctions
     * @param _auctionId uint of the auction owner
@@ -134,7 +131,6 @@ contract AuctionRepository {
         }
         return (uint256(0), address(0));
     }
-
     /**
     * @dev Gets the total number of auctions owned by an address
     * @param _owner address of the owner
@@ -143,7 +139,6 @@ contract AuctionRepository {
     function getAuctionsCountOfOwner(address _owner) public view returns(uint) {
         return auctionOwner[_owner].length;
     }
-
     /**
     * @dev Gets the info of a given auction which are stored within a struct
     * @param _auctionId uint ID of the auction
@@ -171,7 +166,6 @@ contract AuctionRepository {
             auc.active, 
             auc.finalized);
     }
-    
 
     function approveAndTransfer(address _from, address _to, address _deedRepositoryAddress, uint256 _deedId) internal returns(bool) {
         DeedRepository remoteContract = DeedRepository(_deedRepositoryAddress);
@@ -180,6 +174,16 @@ contract AuctionRepository {
         return true;
     }
 
+
+    function transferNftToContract(address _deedRepositoryAddress, uint256 _deedId) internal returns(bool) {
+        DeedRepository indexContract = DeedRepository(_deedRepositoryAddress);
+        indexContract.approve(address(this), _deedId);
+        indexContract.transferFrom(msg.sender, address(this), _deedId);
+        emit OwnershipTransfered(msg.sender, _deedId);
+        return true;
+        
+
+    }
     /**
     * @dev Cancels an ongoing auction by the owner
     * @dev Deed is transfered back to the auction owner
@@ -204,7 +208,6 @@ contract AuctionRepository {
             emit AuctionCanceled(msg.sender, _auctionId);
         }
     }
-
     /**
     * @dev Finalized an ended auction
     * @dev The auction should be ended, and there should be at least one bid
@@ -237,7 +240,6 @@ contract AuctionRepository {
             }
         }
     }
-
     /**
     * @dev Bidder sends bid on an auction
     * @dev Auction should be active and not ended
@@ -263,7 +265,6 @@ contract AuctionRepository {
             lastBid = auctionBids[_auctionId][bidsLength - 1];
             tempAmount = lastBid.amount;
         }
-
         // check if amound is greater than previous amount  
         if( ethAmountSent < tempAmount ) revert(); 
 
@@ -281,15 +282,4 @@ contract AuctionRepository {
         auctionBids[_auctionId].push(newBid);
         emit BidSuccess(msg.sender, _auctionId);
     }
-
-    event BidSuccess(address _from, uint _auctionId);
-
-    // AuctionCreated is fired when an auction is created
-    event AuctionCreated(address _owner, uint _auctionId);
-
-    // AuctionCanceled is fired when an auction is canceled
-    event AuctionCanceled(address _owner, uint _auctionId);
-
-    // AuctionFinalized is fired when an auction is finalized
-    event AuctionFinalized(address _owner, uint _auctionId);
 }
